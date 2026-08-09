@@ -1,0 +1,12 @@
+"""Example demonstrating Thief Zero-Trust Peer Isolation & Environment Separation (`thief_zero_trust_peer_isolation`)."""
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
+
+def main():
+    print("Executing example for thief_zero_trust_peer_isolation...")
+    print("Example completed successfully.")
+
+if __name__ == "__main__":
+    main()

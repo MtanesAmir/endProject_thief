@@ -1,0 +1,28 @@
+version = "1.10"
+
+[game]
+group_name = "Thief-Team"
+group_id = "thief-team"
+sub_game_number = 1
+members = ["id-2001", "id-2002"]
+repos = { cop = "https://github.com/you/police_repo", thief = "https://github.com/you/thief_repo" }
+
+[network]
+my_port = 8802
+opponent_url = "http://127.0.0.1:8801/mcp"
+turn_timeout_seconds = 180
+
+[strategy]
+thief_class = "src.strategy.thief_brain:ThiefBrain"
+police_class = "src.strategy.police_brain:MyPoliceBrain"
+
+[trash_talk]
+provider = "template"
+
+[llm]
+model = "claude-opus-4-8[1m]"
+step_deadline_seconds = 30
+
+[email]
+recipient = "rmisegal+uoh26finalgame@gmail.com"
+mode = "draft"
