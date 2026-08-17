@@ -24,6 +24,12 @@ dev = [
     "pytest-cov>=2.12.1",
     "ruff>=0.1.0",
 ]
+tunnel = [
+    "pyngrok>=7.0.0",
+]
+llm = [
+    "openai>=1.0.0",
+]
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,49 @@
+{
+  "summary": {
+    "outcome": "THIEF_SURVIVAL",
+    "final_score": 10,
+    "total_steps": 35
+  },
+  "artifacts": {
+    "declaration_thief.json": {
+      "artifact_type": "declaration",
+      "agent_role": "Thief",
+      "commit_hash": "0000000000000000000000000000000000000000",
+      "github_repo_url": "https://github.com/MtanesAmir/endProject_thief",
+      "timestamp": "2026-08-17T13:55:31Z",
+      "signature": "75be108144b6a68b2da3938bff184f735007a99a3ce82b089e0215c89f844a21"
+    },
+    "config_thief.json": {
+      "artifact_type": "config",
+      "agent_role": "Thief",
+      "grid_size": 7,
+      "timeout_ms": 50,
+      "max_turns": 35,
+      "thief_config": {
+        "mode": "Dec-POMDP",
+        "zero_trust": true
+      }
+    },
+    "log_thief.json": {
+      "artifact_type": "log",
+      "agent_role": "Thief",
+      "total_steps": 35,
+      "verified_ok": true,
+      "trajectory_summary": []
+    },
+    "result_thief.json": {
+      "artifact_type": "result",
+      "agent_role": "Thief",
+      "outcome": "THIEF_SURVIVAL",
+      "final_score": 10,
+      "token_consumption_stats": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0
+      },
+      "timestamp": "2026-08-17T13:55:31Z"
+    }
+  },
+  "thief_commit": "c67212e01b0cf7c370279db4445e620417416972",
+  "cop_commit": "c67212e01b0cf7c370279db4445e620417416972",
+  "total_llm_tokens": 0
+}

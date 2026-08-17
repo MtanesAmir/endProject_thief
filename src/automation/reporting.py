@@ -2,6 +2,9 @@
 
 Compiles match artifacts (declaration_thief.json, config_thief.json, log_thief.json, result_thief.json)
 and transmits match reports via OAuth 2.0 Gmail API to the evaluator.
+
+Actual email delivery is delegated to ``GameReporter`` in ``src.infra.reporter``
+to maintain a single responsibility split: this module *compiles*, reporter *sends*.
 """
 
 import hashlib
@@ -30,7 +33,7 @@ class GmailReporter:
     def compile_match_reports(self, summary_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         timestamp = summary_data.get("timestamp", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
         commit_hash = summary_data.get("commit_hash", "0000000000000000000000000000000000000000")
-        repo_url = summary_data.get("github_repo_url", "https://github.com/MtanesAmir/project_thief")
+        repo_url = summary_data.get("github_repo_url", "https://github.com/MtanesAmir/endProject_thief")
 
         declaration = {
             "artifact_type": "declaration",
@@ -74,39 +77,31 @@ class GmailReporter:
             "result_thief.json": result,
         }
 
-    def send_gmail_report(
-        self,
-        recipient: str,
-        subject: str,
-        body_json: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        recipient = recipient or self.evaluator_email
-        credentials_exist = os.path.exists(self.credentials_path)
-        token_exists = os.path.exists(self.token_path)
-
-        payload_str = json.dumps(body_json, sort_keys=True)
-        message_id = hashlib.sha256(f"{recipient}|{subject}|{payload_str}".encode("utf-8")).hexdigest()[:16]
-
-        status = "SENT_OAUTH2" if (credentials_exist or token_exists) else "SENT_MOCK"
-        return {
-            "status": "SENT",
-            "mode": status,
-            "message_id": message_id,
-            "recipient": recipient,
-            "subject": subject,
-            "artifacts_count": len(body_json.get("artifacts", {})) if isinstance(body_json, dict) else 0,
-        }
-
     def send_match_report(
         self,
         summary_data: Dict[str, Any],
         recipient: Optional[str] = None,
     ) -> Dict[str, Any]:
+        """Compile match artifacts and send via Gmail API.
+
+        Delegates actual email delivery to ``GameReporter.send_report`` from
+        ``src.infra.reporter``, avoiding duplicate sending logic.
+        """
         recipient = recipient or self.evaluator_email
         artifacts = self.compile_match_reports(summary_data)
         subject = f"[Thief Match Report] Outcome: {summary_data.get('outcome', 'COMPLETED')}"
         body_payload = {"summary": summary_data, "artifacts": artifacts}
-        return self.send_gmail_report(recipient=recipient, subject=subject, body_json=body_payload)
+
+        try:
+            from src.infra.reporter import GameReporter
+            GameReporter.send_report(
+                game_result=body_payload,
+                game_id=summary_data.get("game_id", "unknown"),
+                lecturer_email=recipient,
+            )
+            return {"status": "SENT", "mode": "GMAIL_API", "recipient": recipient, "subject": subject}
+        except Exception as e:
+            return {"status": "SEND_FAILED", "error": str(e), "recipient": recipient, "subject": subject}
 
 
 def generate_match_artifacts(game_id: str, results: Dict[str, Any], output_dir: str = "results") -> Dict[str, str]:
