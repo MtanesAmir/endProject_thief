@@ -17,8 +17,8 @@ class BrainBase:
     def is_valid_position(self, pos: Tuple[int, int]) -> bool:
         return 0 <= pos[0] < self.grid_size and 0 <= pos[1] < self.grid_size
 
-    def _pick_move(self, state: Dict[str, Any]) -> Tuple[int, int]:
+    def _pick_move(self, state: Dict[str, Any], belief_map: Any = None) -> Tuple[int, int]:
         raise NotImplementedError
 
-    def _decide_move(self, state: Dict[str, Any], barriers: Optional[List[Tuple[int, int]]] = None) -> Tuple[int, int]:
+    def _decide_move(self, state: Dict[str, Any], belief_map: Any = None, barriers: Optional[List[Tuple[int, int]]] = None) -> Tuple[int, int]:
         raise NotImplementedError

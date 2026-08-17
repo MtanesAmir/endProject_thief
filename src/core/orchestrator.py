@@ -22,16 +22,31 @@ class ThiefOrchestrator:
 
     def compute_and_commit(self, state: Dict[str, Any]) -> Tuple[str, str, Tuple[int, int]]:
         self.fsm.transition(GamePhase.COMPUTING_MOVE)
-        chosen_pos = self.brain._decide_move(state, barriers=self.barriers.get_barriers())
-        hint = self.brain._decide_bluff(state, chosen_pos)
+        chosen_pos = self.brain._decide_move(state, belief_map=self.belief_grid, barriers=self.barriers.get_barriers())
+        hint_text, is_truthful = self.brain._decide_bluff(state, chosen_pos)
         self.fsm.transition(GamePhase.COMMITTING)
-        h_commit, nonce = self.crypto.commit(state=str(state), move=str(chosen_pos), intent=hint)
-        self.audit_log.append({"step": self.step_count, "commit": h_commit, "move": str(chosen_pos), "nonce": nonce, "hint": hint})
+        
+        intent_payload = {
+            "message": hint_text,
+            "is_truthful": is_truthful
+        }
+        
+        h_commit, nonce = self.crypto.commit(state=str(state), move=str(chosen_pos), intent=intent_payload)
+        self.audit_log.append({"step": self.step_count, "commit": h_commit, "move": str(chosen_pos), "nonce": nonce, "hint": hint_text})
         return h_commit, nonce, chosen_pos
 
     def record_verified_turn(self, peer_move: Any, peer_hint: str) -> None:
         self.fsm.transition(GamePhase.AWAITING_REVEAL)
         self.fsm.transition(GamePhase.VERIFYING)
-        self.scent_tracker.apply_decay()
+        if isinstance(peer_move, tuple) and len(peer_move) == 2:
+            self.scent_tracker.update_scent(peer_move)
+        elif isinstance(peer_move, list) and len(peer_move) == 2:
+            self.scent_tracker.update_scent(tuple(peer_move))
+        
+        scent = self.scent_tracker.get_matrix()
+        self.belief_grid.update_with_scent(scent)
+        self.belief_grid.update_with_hint(peer_hint)
+        self.belief_grid.normalize()
+        
         self.step_count += 1
         self.fsm.transition(GamePhase.WAITING_FOR_OPPONENT)

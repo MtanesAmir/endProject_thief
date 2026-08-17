@@ -1,16 +1,16 @@
 """FastMCP server wrapper."""
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable
+from fastmcp import FastMCP
 
 class FastMCPPeerServer:
     def __init__(self, name: str = "thief_peer", port: int = 8802):
         self.name = name
         self.port = port
-        self.handlers: Dict[str, Callable] = {}
+        self.mcp = FastMCP(name)
 
     def register_tool(self, name: str, handler: Callable) -> None:
-        self.handlers[name] = handler
+        handler.__name__ = name
+        self.mcp.add_tool(handler)
 
-    def handle_request(self, tool_name: str, **kwargs) -> Any:
-        if tool_name in self.handlers:
-            return self.handlers[tool_name](**kwargs)
-        raise ValueError(f"Tool {tool_name} not registered")
+    def run(self) -> None:
+        self.mcp.run(transport="sse", port=self.port, host="127.0.0.1")

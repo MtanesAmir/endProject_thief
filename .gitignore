@@ -1,6 +1,6 @@
 .env
-token.json
-credentials.json
+config/token.json
+config/credentials.json
 *.key
 *.pem
 __pycache__/

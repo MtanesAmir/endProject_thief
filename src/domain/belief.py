@@ -23,8 +23,36 @@ class BayesianBeliefGrid:
                 for c in range(self.grid_size):
                     self.probabilities[r][c] /= total
 
-    def update_with_hint(self, reported_dir: str, weight: float = 0.7) -> None:
-        pass
+    def update_with_hint(self, reported_dir: str, weight: float = 0.6) -> None:
+        reported_dir = reported_dir.lower()
+        half_grid = self.grid_size / 2.0
+        words = reported_dir.replace(",", " ").split()
+        
+        valid_dirs = {"north", "n", "south", "s", "east", "e", "west", "w"}
+        if not any(d in words for d in valid_dirs):
+            return
+            
+        for r in range(self.grid_size):
+            for c in range(self.grid_size):
+                in_hemisphere = False
+                if "north" in words or "n" in words:
+                    if r < half_grid: in_hemisphere = True
+                elif "south" in words or "s" in words:
+                    if r >= half_grid: in_hemisphere = True
+                elif "west" in words or "w" in words:
+                    if c < half_grid: in_hemisphere = True
+                elif "east" in words or "e" in words:
+                    if c >= half_grid: in_hemisphere = True
+                
+                multiplier = weight if in_hemisphere else (1.0 - weight)
+                self.probabilities[r][c] *= multiplier
+
+    def normalize(self) -> None:
+        total = sum(sum(row) for row in self.probabilities)
+        if total > 0:
+            for r in range(self.grid_size):
+                for c in range(self.grid_size):
+                    self.probabilities[r][c] /= total
 
     def get_most_likely_position(self) -> Tuple[int, int]:
         max_p = -1.0
