@@ -43,7 +43,22 @@ def create_p2p_server(name: str = "peer", port: int = 8802) -> FastMCPPeerServer
         server.stored_commit = None
         return {"status": "verified"}
 
-    server.register_tool("receive_commit", receive_commit)
-    server.register_tool("receive_reveal", receive_reveal)
+    def negotiate(terms: Dict[str, Any]) -> Dict[str, Any]:
+        return {"status": "accepted"}
+
+    def receive_turn(h_commit: str) -> Dict[str, str]:
+        server.stored_commit = h_commit
+        return {"status": "locked"}
+
+    def submit_audit(state: str, move: str, intent: str, nonce: str) -> Dict[str, Any]:
+        return receive_reveal(state, move, intent, nonce)
+
+    def receive_control(data: str) -> Dict[str, str]:
+        return {"status": "ok"}
+
+    server.register_tool("negotiate", negotiate)
+    server.register_tool("receive_turn", receive_turn)
+    server.register_tool("submit_audit", submit_audit)
+    server.register_tool("receive_control", receive_control)
 
     return server
