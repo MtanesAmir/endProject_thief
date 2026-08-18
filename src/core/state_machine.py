@@ -10,7 +10,7 @@ class GamePhase(Enum):
     TECHNICAL_LOSS = auto()
 
 TRANSITIONS = {
-    GamePhase.WAITING_FOR_OPPONENT: {GamePhase.COMPUTING_MOVE},
+    GamePhase.WAITING_FOR_OPPONENT: {GamePhase.COMPUTING_MOVE, GamePhase.VERIFYING},
     GamePhase.COMPUTING_MOVE: {GamePhase.COMMITTING, GamePhase.TECHNICAL_LOSS},
     GamePhase.COMMITTING: {GamePhase.AWAITING_REVEAL},
     GamePhase.AWAITING_REVEAL: {GamePhase.VERIFYING, GamePhase.TECHNICAL_LOSS},

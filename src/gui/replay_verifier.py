@@ -13,9 +13,10 @@ class ReplayVerifier:
         state = entry.get("state", {})
         intent = entry.get("hint", "")
         
-        payload = {"intent": intent, "move": move, "nonce": nonce, "state": state}
-        s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-        h = hashlib.sha256(s.encode("utf-8")).hexdigest()
+        payload = {"intent": intent, "move": move, "state": state}
+        s = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        seed = f"{s}|{nonce}"
+        h = hashlib.sha256(seed.encode("utf-8")).hexdigest()
         
         return secrets.compare_digest(commit, h)
 

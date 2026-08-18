@@ -11,13 +11,14 @@ class CommitmentScheme:
 
     @staticmethod
     def canonical_serialize(payload: Any) -> str:
-        return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
     def create_commitment(self, move: Any, nonce: Optional[str] = None) -> Tuple[str, str]:
         if nonce is None:
             nonce = self.generate_nonce(16)
-        payload = {"move": move, "nonce": nonce}
-        h = hashlib.sha256(self.canonical_serialize(payload).encode("utf-8")).hexdigest()
+        payload = {"move": move}
+        seed = f"{self.canonical_serialize(payload)}|{nonce}"
+        h = hashlib.sha256(seed.encode("utf-8")).hexdigest()
         return h, nonce
 
     def verify_reveal(self, commitment: str, move: Any, nonce: str) -> bool:
@@ -32,11 +33,13 @@ class CommitRevealEngine:
     def commit(self, state: Any, move: Any, intent: Any = None, nonce: Optional[str] = None) -> Tuple[str, str]:
         if nonce is None:
             nonce = self.scheme.generate_nonce(16)
-        payload = {"intent": intent, "move": move, "nonce": nonce, "state": state}
-        h = hashlib.sha256(self.scheme.canonical_serialize(payload).encode("utf-8")).hexdigest()
+        payload = {"intent": intent, "move": move, "state": state}
+        seed = f"{self.scheme.canonical_serialize(payload)}|{nonce}"
+        h = hashlib.sha256(seed.encode("utf-8")).hexdigest()
         return h, nonce
 
     def verify(self, commitment: str, state: Any, move: Any, intent: Any, nonce: str) -> bool:
-        payload = {"intent": intent, "move": move, "nonce": nonce, "state": state}
-        h = hashlib.sha256(self.scheme.canonical_serialize(payload).encode("utf-8")).hexdigest()
+        payload = {"intent": intent, "move": move, "state": state}
+        seed = f"{self.scheme.canonical_serialize(payload)}|{nonce}"
+        h = hashlib.sha256(seed.encode("utf-8")).hexdigest()
         return secrets.compare_digest(commitment, h)

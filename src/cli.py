@@ -14,6 +14,7 @@ def main():
     peer_p = subparsers.add_parser("peer")
     peer_p.add_argument("--role", default="thief")
     peer_p.add_argument("--port", type=int, default=8802)
+    peer_p.add_argument("--opponent-url", type=str, default="")
 
     match_p = subparsers.add_parser("match")
     match_p.add_argument("--rounds", type=int, default=1)
@@ -35,8 +36,9 @@ def main():
         
         if args.report_to:
             from src.infra.reporter import GameReporter
-            import uuid
-            game_id = str(uuid.uuid4())[:8]
+            group_a = "mtanesamir_thief"
+            group_b = "opponent_police" # This should dynamically come from negotiation
+            game_id = "-vs-".join(sorted([group_a, group_b]))
             print(f"Triggering report delivery to {args.report_to}...")
             GameReporter.send_report(res, game_id, args.report_to)
     elif args.command == "benchmark":
@@ -64,10 +66,12 @@ def main():
             print(f"Error: Log file '{args.log}' contains invalid JSON.")
             sys.exit(1)
     elif args.command == "peer":
-        from src.p2p.server import create_p2p_server
+        import os
+        if hasattr(args, 'opponent_url') and args.opponent_url:
+            os.environ["OPPONENT_URL"] = args.opponent_url
+        import src.network.mcp_server as mcp_server
         print(f"Starting {args.role} peer on port {args.port}...")
-        server = create_p2p_server(name=args.role, port=args.port)
-        server.run()
+        mcp_server.mcp.run(transport="sse", host="0.0.0.0", port=args.port)
     else:
         print("Thief Peer ready.")
 
