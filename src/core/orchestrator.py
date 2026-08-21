@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ThiefOrchestrator:
-    def __init__(self, p2p_server: Optional[Any] = None, start_pos: Tuple[int, int] = (3, 3), grid_size: int = 7):
+    def __init__(self, start_pos: Tuple[int, int] = (3, 3), grid_size: int = 7, p2p_server: Optional[Any] = None):
         self.fsm = GamePhaseMachine()
         self.crypto = CommitRevealEngine()
         self.scent_tracker = ScentTracker(grid_size)
@@ -41,10 +41,48 @@ class ThiefOrchestrator:
             return self.process_turn(payload)
 
         if msg_type == "submit_audit":
-            self.fsm.transition(GamePhase.VERIFYING)
+            # Audit is end-of-game; acknowledge without a FSM transition.
             return {"status": "OK", "msg_type": msg_type, "state": self.fsm.state.name}
 
         return {"status": "OK", "msg_type": msg_type, "state": self.fsm.state.name}
+
+    def compute_and_commit(self, state: Dict[str, Any]) -> Tuple[str, str, Tuple[int, int]]:
+        """Decide a move, generate a bluff, create a SHA-256 commitment.
+
+        Returns:
+            (commit_hash, nonce, chosen_position)
+        """
+        chosen_pos = self.brain._decide_move(
+            state, belief_map=self.belief_grid, barriers=self.barriers.get_barriers(),
+        )
+        hint_text, is_truthful = self.brain._decide_bluff(state, chosen_pos)
+
+        intent_payload = {"message": hint_text, "is_truthful": is_truthful}
+        h_commit, nonce = self.crypto.commit(
+            state=str(state), move=str(chosen_pos), intent=intent_payload,
+        )
+
+        self.audit_log.append({
+            "step": self.current_turn + 1,
+            "commit": h_commit,
+            "move": str(chosen_pos),
+            "nonce": nonce,
+            "hint": hint_text,
+        })
+        return h_commit, nonce, chosen_pos
+
+    def record_verified_turn(
+        self,
+        opponent_move: Tuple[int, int],
+        opponent_hint: str,
+    ) -> None:
+        """Record verified opponent data and update scent / belief grids."""
+        self.scent_tracker.update_scent(opponent_move)
+        self.belief_grid.update_with_scent(self.scent_tracker.get_matrix())
+        self.belief_grid.update_with_hint(opponent_hint)
+        self.belief_grid.normalize()
+        self.step_count += 1
+        self.current_turn += 1
 
     def process_turn(self, opponent_move_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         try:

@@ -3,10 +3,15 @@ from unittest.mock import patch, MagicMock
 from src.infra.llm_provider import LLMProvider
 
 
+# Helper to check if a string contains a valid deceptive direction hint
+def _has_direction(text):
+    return any(d in text.lower() for d in ["north", "south", "east", "west"])
+
+
 def test_template_provider():
     p = LLMProvider("template")
     result = p.generate_bluff(context={"step": 1}, actual_move="(3, 3)")
-    assert "I moved" in result
+    assert _has_direction(result)
     assert p.total_tokens == 15
 
 
@@ -16,7 +21,7 @@ def test_ollama_fallback_on_error():
     with patch("src.infra.llm_provider.requests") as mock_req:
         mock_req.post.side_effect = Exception("Connection refused")
         result = p.generate_bluff(context={}, actual_move="(2, 2)")
-    assert "I moved" in result  # Fell back to template
+    assert _has_direction(result)  # Fell back to template
 
 
 def test_openai_fallback_no_key():
@@ -24,7 +29,7 @@ def test_openai_fallback_no_key():
     p = LLMProvider("openai")
     with patch.dict("os.environ", {}, clear=True):
         result = p.generate_bluff(context={}, actual_move="(1, 1)")
-    assert "I moved" in result  # Fell back to template
+    assert _has_direction(result)  # Fell back to template
 
 
 def test_openai_fallback_on_error():
@@ -34,7 +39,7 @@ def test_openai_fallback_on_error():
         with patch("src.infra.llm_provider.requests") as mock_req:
             mock_req.post.side_effect = Exception("API error")
             result = p.generate_bluff(context={}, actual_move="(4, 4)")
-    assert "I moved" in result  # Fell back to template
+    assert _has_direction(result)  # Fell back to template
 
 
 def test_ollama_success():
@@ -80,3 +85,12 @@ def test_build_prompt():
     prompt = p._build_prompt(context={"step": 5}, actual_move="(3, 3)", word_limit=15)
     assert "deceptive" in prompt.lower()
     assert "(3, 3)" in prompt
+
+
+def test_template_does_not_leak_position():
+    """Critical test: ensure the template does NOT include the actual move coordinates."""
+    p = LLMProvider("template")
+    result = p.generate_bluff(context={}, actual_move="(5, 2)")
+    # The actual coordinates must NOT appear in the hint
+    assert "(5, 2)" not in result
+    assert "5, 2" not in result

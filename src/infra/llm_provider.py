@@ -40,8 +40,41 @@ class LLMProvider:
         )
 
     def _generate_template(self, context: Dict[str, Any], actual_move: str, word_limit: int) -> str:
+        """Generate a deceptive bluff that hides the real move direction."""
+        import random
         self.total_tokens += 15  # dummy tracking
-        return f"I moved {actual_move} towards the shadows."
+
+        # Parse the actual move to compute a deceptive direction
+        opposite_dirs = {"N": "south", "S": "north", "E": "west", "W": "east"}
+        all_dirs = list(opposite_dirs.values())
+
+        # Try to infer direction from the move string (e.g. "(4, 3)" vs previous)
+        bluff_dir = random.choice(all_dirs)
+        try:
+            # actual_move looks like "(row, col)" — extract numbers
+            parts = actual_move.strip("() ").split(",")
+            if len(parts) == 2:
+                row, col = int(parts[0].strip()), int(parts[1].strip())
+                # Pick opposite of dominant movement direction from center (3,3)
+                if row < 3:
+                    bluff_dir = random.choice(["south", "east"])
+                elif row > 3:
+                    bluff_dir = random.choice(["north", "west"])
+                if col < 3:
+                    bluff_dir = random.choice(["east", "south"])
+                elif col > 3:
+                    bluff_dir = random.choice(["west", "north"])
+        except (ValueError, IndexError):
+            pass
+
+        templates = [
+            f"I'm heading {bluff_dir} through the alley.",
+            f"Moving {bluff_dir} towards the market.",
+            f"Taking the {bluff_dir} corridor now.",
+            f"Slipping {bluff_dir} past the checkpoint.",
+            f"I went {bluff_dir} near the plaza.",
+        ]
+        return random.choice(templates)
 
     def _generate_ollama(self, context: Dict[str, Any], actual_move: str, word_limit: int) -> str:
         """Generate bluff via local Ollama server (http://localhost:11434)."""

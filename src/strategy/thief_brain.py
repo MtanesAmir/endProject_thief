@@ -44,6 +44,7 @@ class ThiefBrain(BrainBase):
 
         best_move = valid_positions[0]
         max_score = -99999
+        max_edge = self.grid_size - 1
 
         for move in valid_positions:
             dist = manhattan_distance(move, cop_pos)
@@ -51,14 +52,37 @@ class ThiefBrain(BrainBase):
             future_valid = [p.to_tuple() for p in legal_moves(move, grid_size=self.grid_size, barriers=barriers)]
             dof = len(future_valid)
 
+            # Dead-end penalty: penalize moves that leave us with <=2 options
             penalty = 0
             if dof <= 1:
                 penalty = -100
+            elif dof <= 2:
+                penalty = -30
+
+            # Wall-proximity penalty: discourage hugging edges and corners
+            r, c = move
+            wall_dist_r = min(r, max_edge - r)
+            wall_dist_c = min(c, max_edge - c)
+            min_wall_dist = min(wall_dist_r, wall_dist_c)
+
+            wall_penalty = 0
+            if min_wall_dist == 0:
+                # On the wall edge itself
+                wall_penalty = -8
+                # Extra penalty for corners (both dimensions on edge)
+                if wall_dist_r == 0 and wall_dist_c == 0:
+                    wall_penalty = -20
+            elif min_wall_dist == 1:
+                wall_penalty = -3
+
+            # Center-gravity bonus: slight pull toward interior positions
+            center = self.grid_size / 2.0
+            center_bonus = -(abs(r - center) + abs(c - center)) * 0.5
 
             # Q-value bonus: reward moves that Q-learning has found effective
             q_bonus = self.q_agent.q_table.get((current_state_key, str(move)), 0.0) * 2.0
 
-            score = dist + penalty + q_bonus
+            score = (dist * 10) + penalty + wall_penalty + center_bonus + q_bonus
             if score > max_score:
                 max_score = score
                 best_move = move

@@ -12,7 +12,8 @@ def test_version_info():
 def test_llm_provider():
     p1 = LLMProvider("template")
     result = p1.generate_bluff(context={}, actual_move="(3, 3)")
-    assert "I moved" in result
+    # The template should generate a deceptive hint with a direction word
+    assert any(d in result.lower() for d in ["north", "south", "east", "west"])
     p2 = LLMProvider("custom")
     result2 = p2.generate_bluff(context={}, actual_move="(2, 2)")
     assert isinstance(result2, str)

@@ -6,6 +6,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.request
 from typing import Any, Dict, Optional, List
+from src.domain.crypto import CommitRevealEngine
 
 
 class FastMCPHTTPHandler(BaseHTTPRequestHandler):
@@ -101,4 +102,19 @@ class FastMCPServer:
             return {"status": "error", "message": "No opponent URL configured"}
         self.queue.put((method, params))
         return {"status": "enqueued"}
+
+
+class P2PServer:
+    """Lightweight P2P server descriptor carrying name, port and crypto engine."""
+
+    def __init__(self, name: str, port: int):
+        self.name = name
+        self.port = port
+        self.crypto_engine = CommitRevealEngine()
+        self.stored_commit: Optional[str] = None
+
+
+def create_p2p_server(name: str = "thief", port: int = 8802) -> P2PServer:
+    """Factory function to create a P2P server with crypto engine."""
+    return P2PServer(name=name, port=port)
 

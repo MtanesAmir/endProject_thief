@@ -10,8 +10,8 @@
       "agent_role": "Thief",
       "commit_hash": "0000000000000000000000000000000000000000",
       "github_repo_url": "https://github.com/MtanesAmir/endProject_thief",
-      "timestamp": "2026-08-18T17:01:08Z",
-      "signature": "5a6487c76fe6a3fa064efb7b1d54abeef32783a0d57b9a11ddeadc238cd99389"
+      "timestamp": "2026-08-21T21:18:05Z",
+      "signature": "c3befc766e8cd95c4aadf17faa9c6936513000062ed3c74dd36b43a31942780e"
     },
     "config_thief.json": {
       "artifact_type": "config",
@@ -40,10 +40,10 @@
         "prompt_tokens": 0,
         "completion_tokens": 0
       },
-      "timestamp": "2026-08-18T17:01:08Z"
+      "timestamp": "2026-08-21T21:18:05Z"
     }
   },
-  "thief_commit": "c5c24dd04c484c8acf8562b9ca8c5d6bbe668209",
-  "cop_commit": "c5c24dd04c484c8acf8562b9ca8c5d6bbe668209",
+  "thief_commit": "cdeb2203ed3c4ef0efadeff09d5c271e4ba2dd91",
+  "cop_commit": "cdeb2203ed3c4ef0efadeff09d5c271e4ba2dd91",
   "total_llm_tokens": 0
 }

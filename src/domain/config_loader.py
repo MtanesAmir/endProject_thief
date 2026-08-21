@@ -6,8 +6,11 @@ from typing import Any, Dict
 def load_shared_contract(path: str = "config/game.json") -> Dict[str, Any]:
     if not os.path.exists(path):
         return {}
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        return {}
 
 def load_peer_config(path: str = "config/game.toml") -> Dict[str, Any]:
     if not os.path.exists(path):
