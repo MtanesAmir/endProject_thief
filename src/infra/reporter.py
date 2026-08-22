@@ -2,14 +2,10 @@
 import json
 import subprocess
 import os
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
-import base64
+import smtplib
 from email.message import EmailMessage
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+
 
 class GameReporter:
     @staticmethod
@@ -32,29 +28,20 @@ class GameReporter:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(game_result, f, indent=2)
 
-        creds = None
-        if os.path.exists('config/token.json'):
-            creds = Credentials.from_authorized_user_file('config/token.json', SCOPES)
+        if not os.path.exists('config/app_password.txt'):
+            print("Error: config/app_password.txt not found. Please create it and paste your Google App Password inside.")
+            return
             
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not os.path.exists('config/credentials.json'):
-                    print("Error: config/credentials.json not found. Please provide Google OAuth secrets.")
-                    return
-                flow = InstalledAppFlow.from_client_secrets_file('config/credentials.json', SCOPES)
-                creds = flow.run_local_server(port=0)
-            with open('config/token.json', 'w') as token:
-                token.write(creds.to_json())
+        with open('config/app_password.txt', 'r', encoding='utf-8') as f:
+            app_password = f.read().strip()
 
         try:
-            service = build('gmail', 'v1', credentials=creds)
-
             message = EmailMessage()
             message.set_content(f"Automated game report for match ID: {game_id}.")
             message['To'] = lecturer_email
-            message['From'] = "thief.agent@example.com"
+            
+            sender_email = "qusai.amara9@gmail.com"
+            message['From'] = sender_email
             message['Subject'] = f"Game Report: {game_id}"
 
             with open(filename, 'rb') as f:
@@ -62,15 +49,15 @@ class GameReporter:
 
             message.add_attachment(content, maintype='application', subtype='json', filename=filename)
 
-            encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
-            create_message = {'raw': encoded_message}
-
             from src.domain.gatekeeper import GatekeeperValidator
             if not GatekeeperValidator.global_limiter.acquire(1.0):
-                print("Gmail API Rate limit exceeded. Throttling report delivery.")
+                print("SMTP Rate limit exceeded. Throttling report delivery.")
                 return
 
-            send_message = (service.users().messages().send(userId="me", body=create_message).execute())
-            print(f'Report sent via Gmail API. Message Id: {send_message["id"]}')
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp_server:
+                smtp_server.login(sender_email, app_password)
+                smtp_server.send_message(message)
+                
+            print(f'Report sent via SMTP.')
         except Exception as e:
-            print(f"Failed to send email report: {e}")
+            print(f"Failed to send email report via SMTP: {e}")

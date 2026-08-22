@@ -16,17 +16,44 @@ from src.strategy.police_brain import MyPoliceBrain
 from src.domain.scent import ScentTracker
 from src.domain.belief import BayesianBeliefGrid
 from src.shared.constants import THIEF_START_POS, COP_START_POS, MAX_MOVES, GRID_SIZE
+from src.infra.reporter import GameReporter
 
 app = FastAPI()
+
+TERMS = {
+  "axis_origin_corner": "top-left",
+  "axis_start_index": 0,
+  "barriers_max": 14,
+  "board_size": 7,
+  "cop_start": [0, 0],
+  "decay_per_step": 0.1,
+  "emit_intensity": 0.9,
+  "hint_max_words": 15,
+  "max_steps": 35,
+  "min_center_intensity": 0.5,
+  "num_games": 6,
+  "setting": "Haifa",
+  "smell_grid_size": 5,
+  "thief_start": [3, 3]
+}
+
+def canonical(obj) -> str:
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+def commit_of(obj: dict, nonce: str) -> str:
+    return hashlib.sha256((canonical(obj) + "|" + nonce).encode("utf-8")).hexdigest()
 
 class GameState:
     def __init__(self):
         self.game_count = 0
         self.step = 0
-        self.opponent_url = "https://propose-effectively-tomato-raises.trycloudflare.com/mcp"
+        self.opponent_url = "https://hint-prep-nokia-brochures.trycloudflare.com/mcp"
         self.running = False
         self.turn_queue = asyncio.Queue()
         self.game_task = None
+        self.last_cop_claim = None
+        self.caught_by_cop = False
+        self.sub_games_results = []
 
 state = GameState()
 
@@ -55,29 +82,23 @@ async def game_loop():
             await asyncio.sleep(5)
             
     try:
-        print("[GAME LOOP] Starting 6 warmup games...")
+        print("[GAME LOOP] Starting 6 games...")
         state.running = True
+        state.sub_games_results = []
         
         for game in range(6):
             sub_game = game + 1
             my_role = "thief" if game % 2 == 0 else "police"
+            opponent_role = "police" if my_role == "thief" else "thief"
             
             print(f"\n{'='*40}\nStarting Game {sub_game}/6 - Playing as {my_role.upper()}\n{'='*40}")
             
             # NEGOTIATE
-            neg_terms = {
-                'board_size': 7, 'smell_grid_size': 5, 'decay_per_step': 0.1,
-                'emit_intensity': 0.9, 'min_center_intensity': 0.5, 'max_steps': 35,
-                'barriers_max': 14, 'setting': 'New York', 'hint_max_words': 15,
-                'axis_origin_corner': 'top-left', 'axis_start_index': 0,
-                'thief_start': [3, 3], 'cop_start': [0, 0], 'num_games': 6
-            }
             n_nonce = secrets.token_hex(16)
-            n_body = json.dumps(neg_terms, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-            n_signature = hashlib.sha256(f'{n_body}|{n_nonce}'.encode()).hexdigest()
+            n_signature = commit_of(TERMS, n_nonce)
             neg_msg = {
                 "message": {
-                    "terms": neg_terms,
+                    "terms": TERMS,
                     "nonce": n_nonce,
                     "signature": n_signature,
                     "group_id": "amirmtan",
@@ -85,12 +106,12 @@ async def game_loop():
                     "sub_game_number": sub_game,
                     "identity": {
                         "group_id": "amirmtan", "group_name": "amirmtan",
-                        "git_commit_hash": "fe093bfd2ad2210741b17f69da917121ac86eb3d",
-                        "github_commit": "fe093bfd2ad2210741b17f69da917121ac86eb3d",
+                        "git_commit_hash": GameReporter.get_git_commit(),
+                        "github_commit": GameReporter.get_git_commit(),
                         "members": ["Qusai Lela", "Amir Mtanes"],
                         "mcp_servers": {
-                            "cop": "https://connections-polls-result-streets.trycloudflare.com/mcp",
-                            "thief": "https://connections-polls-result-streets.trycloudflare.com/mcp"
+                            "cop": "https://further-favourite-theft-stars.trycloudflare.com/mcp",
+                            "thief": "https://further-favourite-theft-stars.trycloudflare.com/mcp"
                         }, "llm_model": "template", "code_version": "1.00", "first_mover": "thief",
                         "config_sha256": "3835f6a137620d8d98ab3925b2d1ed397d2d20d23bb9ba857bcd104284aac443",
                         "scent_model_sha256": "ea7225f5d71989add99a0057287342b7c5b86ab4efffd1608da25d0e368c0a28"
@@ -112,12 +133,16 @@ async def game_loop():
             
             if my_role == "thief":
                 orchestrator = ThiefOrchestrator(start_pos=THIEF_START_POS, grid_size=GRID_SIZE)
+                thief_scent = ScentTracker(GRID_SIZE)
             else:
                 cop_brain = MyPoliceBrain(start_pos=COP_START_POS, grid_size=GRID_SIZE)
                 cop_scent = ScentTracker(GRID_SIZE)
                 cop_belief = BayesianBeliefGrid(GRID_SIZE)
             
-            # PLAY TURNS
+            end_reason = 'survival'
+            state.caught_by_cop = False
+            state.last_cop_claim = None
+            
             for step in range(MAX_MOVES):
                 step_idx = step + 1
                 state.step = step_idx
@@ -129,6 +154,9 @@ async def game_loop():
                     move_str = get_move_str(thief_pos, chosen_pos)
                     hint = orchestrator.audit_log[-1]["hint"]
                     
+                    caught = state.caught_by_cop
+                    claim_response = {"claim": state.last_cop_claim, "caught": caught} if state.last_cop_claim else None
+                    
                     payload = {
                         'step': step_idx,
                         'role': 'thief',
@@ -139,37 +167,52 @@ async def game_loop():
                         'sub_game': sub_game,
                         'sub_game_number': sub_game
                     }
-                    body = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-                    commit_hash = hashlib.sha256(f'{body}|{t_nonce}'.encode()).hexdigest()
+                    if claim_response:
+                        payload['claim_response'] = claim_response
+                        
+                    t_nonce_actual = secrets.token_hex(16)
+                    commit_hash = commit_of(payload, t_nonce_actual)
                     
                     audit_log.append({
                         "payload": payload,
-                        "nonce": t_nonce,
+                        "nonce": t_nonce_actual,
                         "commit": commit_hash
                     })
+                    
+                    thief_pos = chosen_pos
+                    thief_scent.update_scent(thief_pos)
                     
                     turn_msg = {
                         "message": {
                             "step": step_idx,
                             "sender": "thief",
                             "hint": hint,
-                            "smell_grid": {},
+                            "smell_grid": {f"{r},{c}": thief_scent.get_matrix()[r][c] for r in range(GRID_SIZE) for c in range(GRID_SIZE)},
                             "commit": commit_hash,
                             "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                             "barrier_placed": None,
                             "capture_claim": None,
-                            "claim_response": None,
-                            "win_claim": None
+                            "claim_response": claim_response,
+                            "win_claim": {"type": "survival"} if step_idx == MAX_MOVES and not caught else None
                         }
                     }
                     
-                    thief_pos = chosen_pos
                     print(f"[GAME LOOP] Sending Thief turn {step_idx}...")
                     await mcp_client.call_tool("receive_turn", turn_msg)
                     
+                    if caught:
+                        print(f"[GAME LOOP] Thief was caught! Ending sub-game.")
+                        end_reason = "capture"
+                        break
+                    
+                    if step_idx == MAX_MOVES:
+                        print(f"[GAME LOOP] Thief survival at step 35! Ending sub-game.")
+                        end_reason = "survival"
+                        break
+                    
                     print(f"[GAME LOOP] Waiting for Police turn {step_idx}...")
                     try:
-                        cop_turn = await asyncio.wait_for(state.turn_queue.get(), timeout=30.0)
+                        cop_turn = await asyncio.wait_for(state.turn_queue.get(), timeout=180.0)
                         cop_grid = cop_turn.get("smell_grid", {})
                         if isinstance(cop_grid, str):
                             try:
@@ -178,20 +221,41 @@ async def game_loop():
                                 cop_grid = {}
                         cop_hint = cop_turn.get("hint", "No hint")
                         print(f"[GAME LOOP] Received Police turn {step_idx}")
-                        orchestrator.record_verified_turn((0,0), cop_hint) # We don't have cop move, use 0,0
+                        orchestrator.record_verified_turn((0,0), cop_hint)
+                        
+                        cop_claim = cop_turn.get("capture_claim")
+                        state.last_cop_claim = cop_claim
+                        if cop_claim and list(thief_pos) == list(cop_claim):
+                            state.caught_by_cop = True
+                        else:
+                            state.caught_by_cop = False
+                            
                     except asyncio.TimeoutError:
                         print(f"[GAME LOOP] Timed out waiting for Police turn {step_idx}!")
+                        end_reason = "timeout"
                         break
 
                 else:
                     # POLICE LOGIC
                     print(f"[GAME LOOP] Waiting for Thief turn {step_idx}...")
                     try:
-                        thief_turn = await asyncio.wait_for(state.turn_queue.get(), timeout=30.0)
+                        thief_turn = await asyncio.wait_for(state.turn_queue.get(), timeout=180.0)
                         thief_hint = thief_turn.get("hint", "")
                         print(f"[GAME LOOP] Received Thief turn {step_idx}")
+                        
+                        claim_resp = thief_turn.get("claim_response")
+                        if claim_resp and claim_resp.get("caught"):
+                            print("[GAME LOOP] We caught the thief! Ending sub-game.")
+                            end_reason = "capture"
+                            break
+                            
+                        if thief_turn.get("win_claim") == {"type": "survival"}:
+                            print("[GAME LOOP] Thief claims survival at step 35! Ending sub-game.")
+                            end_reason = "survival"
+                            break
                     except asyncio.TimeoutError:
                         print(f"[GAME LOOP] Timed out waiting for Thief turn {step_idx}!")
+                        end_reason = "timeout"
                         break
                     
                     cop_estimated_thief = cop_belief.get_most_likely_position()
@@ -199,7 +263,6 @@ async def game_loop():
                     
                     chosen_pos = cop_brain._decide_move(c_state)
                     move_str = get_move_str(cop_pos, chosen_pos)
-                    c_nonce = secrets.token_hex(16)
                     hint = f"Movement is happening"
                     
                     payload = {
@@ -210,26 +273,28 @@ async def game_loop():
                         'intent': 'pursuit',
                         'hint': hint,
                         'sub_game': sub_game,
-                        'sub_game_number': sub_game
+                        'sub_game_number': sub_game,
+                        'capture_claim': list(chosen_pos)
                     }
-                    body = json.dumps(payload, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
-                    commit_hash = hashlib.sha256(f'{body}|{c_nonce}'.encode()).hexdigest()
+                    
+                    c_nonce_actual = secrets.token_hex(16)
+                    commit_hash = commit_of(payload, c_nonce_actual)
                     
                     audit_log.append({
                         "payload": payload,
-                        "nonce": c_nonce,
+                        "nonce": c_nonce_actual,
                         "commit": commit_hash
                     })
                     
                     cop_pos = chosen_pos
-                    cop_scent.update_scent(thief_pos) # Don't really know it, but we can't update scent without it. Pass.
+                    cop_scent.update_scent(cop_pos)
                     
                     turn_msg = {
                         "message": {
                             "step": step_idx,
                             "sender": "police",
                             "hint": hint,
-                            "smell_grid": cop_scent.get_matrix(),
+                            "smell_grid": {f"{r},{c}": cop_scent.get_matrix()[r][c] for r in range(GRID_SIZE) for c in range(GRID_SIZE)},
                             "commit": commit_hash,
                             "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                             "barrier_placed": None,
@@ -244,12 +309,47 @@ async def game_loop():
             
             print(f"[GAME LOOP] Finished Game {sub_game}/6. Sending submit_audit...")
             
+            # Record result
+            my_score = 0
+            opp_score = 0
+            if end_reason == "capture":
+                if my_role == "police":
+                    my_score = 20
+                    opp_score = 5
+                    winner = "amirmtan"
+                else:
+                    my_score = 5
+                    opp_score = 20
+                    winner = "GRP00001"
+            elif end_reason == "survival":
+                if my_role == "thief":
+                    my_score = 10
+                    opp_score = 5
+                    winner = "amirmtan"
+                else:
+                    my_score = 5
+                    opp_score = 10
+                    winner = "GRP00001"
+            else:
+                my_score = 0
+                opp_score = 0
+                winner = None
+            
+            sub_game_result = {
+                "result": end_reason,
+                "roles": {"GRP00001": opponent_role, "amirmtan": my_role},
+                "score": {"GRP00001": opp_score, "amirmtan": my_score},
+                "sub_game_number": sub_game,
+                "winner_group": winner
+            }
+            state.sub_games_results.append(sub_game_result)
+            
             try:
                 audit_msg = {
                     "payload": {
                         "sender": my_role,
                         "records": audit_log,
-                        "result_claim": "survival",
+                        "result_claim": end_reason,
                         "sub_game": sub_game,
                         "sub_game_number": sub_game
                     }
@@ -261,7 +361,75 @@ async def game_loop():
                 
             await asyncio.sleep(2)
 
-        print("[GAME LOOP] All 6 games finished!")
+        print("[GAME LOOP] All 6 games finished! Sending series consensus...")
+        
+        # Calculate aggregates
+        total_grp = sum(sg["score"]["GRP00001"] for sg in state.sub_games_results)
+        total_amir = sum(sg["score"]["amirmtan"] for sg in state.sub_games_results)
+        won_grp = sum(1 for sg in state.sub_games_results if sg["winner_group"] == "GRP00001")
+        won_amir = sum(1 for sg in state.sub_games_results if sg["winner_group"] == "amirmtan")
+        ties = 6 - won_grp - won_amir
+        
+        series_tie = False
+        winner_group = None
+        if total_grp == total_amir:
+            series_tie = True
+            total_grp += 2
+            total_amir += 2
+        elif total_grp > total_amir:
+            winner_group = "GRP00001"
+        else:
+            winner_group = "amirmtan"
+        
+        consensus_obj = {
+            "aggregate": {
+                "total_score": {"GRP00001": total_grp, "amirmtan": total_amir},
+                "sub_games_won": {"GRP00001": won_grp, "amirmtan": won_amir},
+                "ties": ties,
+                "winner_group": winner_group,
+                "series_tie": series_tie
+            },
+            "game_id": "GRP00001-vs-amirmtan",
+            "sub_games": state.sub_games_results
+        }
+        
+        # Hash EXACTLY using specified spaced JSON
+        consensus_str = json.dumps(consensus_obj, sort_keys=True, ensure_ascii=False)
+        consensus_sha = hashlib.sha256(consensus_str.encode('utf-8')).hexdigest()
+        
+        # Write to file so user can copy-paste exact JSON to opponent easily
+        with open("series_consensus.json", "w", encoding="utf-8") as f:
+            f.write(consensus_str)
+            
+        # Add counted flags for lecturer email
+        consensus_obj["match_mode"] = "counted"
+        consensus_obj["lecturer_report_sent"] = True
+        
+        # Send lecturer email
+        try:
+            print("[GAME LOOP] Attempting to send report via Gmail API...")
+            GameReporter.send_report(
+                game_result=consensus_obj,
+                game_id="GRP00001-vs-amirmtan",
+                lecturer_email="rmisegal+uoh26finalgame@gmail.com"
+            )
+        except Exception as e:
+            print(f"[GAME LOOP] Email delivery failed: {e}")
+        
+        try:
+            audit_msg = {
+                "payload": {
+                    "sender": "thief",
+                    "records": [],
+                    "result_claim": "series_consensus",
+                    "consensus_sha": consensus_sha
+                }
+            }
+            await mcp_client.call_tool("submit_audit", audit_msg)
+            print(f"[CLIENT] Sent series_consensus -> success")
+        except Exception as e:
+            print(f"[GAME LOOP] Failed to send series_consensus: {e}")
+
     except Exception as e:
         print(f"[GAME LOOP] Exception in game loop: {e}")
         traceback.print_exc()
@@ -277,7 +445,7 @@ def negotiate(message: dict) -> dict:
 
 def receive_turn(message: dict) -> dict:
     print(f"[SERVER] Receive turn: step {message.get('step')}")
-    state.turn_queue.put_nowait(message)
+    state.turn_queue.put_nowait(message.get("message", message)) # Fix extraction to handle both cases securely
     return {"ok": True}
 
 def submit_audit(payload: dict) -> dict:
@@ -298,10 +466,28 @@ tools_impl = {
     "receive_control": receive_control
 }
 
-tools_schema = [
-    {"name": k, "description": k, "inputSchema": {"type": "object", "properties": {"message": {"type": "object"} if k != "submit_audit" else {"type": "object", "properties": {"payload": {"type": "object"}}}}, "required": ["message" if k != "submit_audit" else "payload"]}}
-    for k in tools_impl
-]
+tools_schema = []
+for k in tools_impl:
+    if k == "submit_audit":
+        tools_schema.append({
+            "name": k,
+            "description": k,
+            "inputSchema": {
+                "type": "object",
+                "properties": {"payload": {"type": "object"}},
+                "required": ["payload"]
+            }
+        })
+    else:
+        tools_schema.append({
+            "name": k,
+            "description": k,
+            "inputSchema": {
+                "type": "object",
+                "properties": {"message": {"type": "object"}},
+                "required": ["message"]
+            }
+        })
 
 @app.post("/mcp")
 async def handle_mcp_post(request: Request):

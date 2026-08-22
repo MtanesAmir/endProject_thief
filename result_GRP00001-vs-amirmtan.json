@@ -1,0 +1,101 @@
+{
+  "aggregate": {
+    "series_tie": false,
+    "sub_games_won": {
+      "GRP00001": 5,
+      "amirmtan": 1
+    },
+    "ties": 0,
+    "total_score": {
+      "GRP00001": 75,
+      "amirmtan": 35
+    },
+    "winner_group": "GRP00001"
+  },
+  "game_id": "GRP00001-vs-amirmtan",
+  "sub_games": [
+    {
+      "result": "capture",
+      "roles": {
+        "GRP00001": "police",
+        "amirmtan": "thief"
+      },
+      "score": {
+        "GRP00001": 20,
+        "amirmtan": 5
+      },
+      "sub_game_number": 1,
+      "winner_group": "GRP00001"
+    },
+    {
+      "result": "survival",
+      "roles": {
+        "GRP00001": "thief",
+        "amirmtan": "police"
+      },
+      "score": {
+        "GRP00001": 10,
+        "amirmtan": 5
+      },
+      "sub_game_number": 2,
+      "winner_group": "GRP00001"
+    },
+    {
+      "result": "capture",
+      "roles": {
+        "GRP00001": "police",
+        "amirmtan": "thief"
+      },
+      "score": {
+        "GRP00001": 20,
+        "amirmtan": 5
+      },
+      "sub_game_number": 3,
+      "winner_group": "GRP00001"
+    },
+    {
+      "result": "survival",
+      "roles": {
+        "GRP00001": "thief",
+        "amirmtan": "police"
+      },
+      "score": {
+        "GRP00001": 10,
+        "amirmtan": 5
+      },
+      "sub_game_number": 4,
+      "winner_group": "GRP00001"
+    },
+    {
+      "result": "survival",
+      "roles": {
+        "GRP00001": "police",
+        "amirmtan": "thief"
+      },
+      "score": {
+        "GRP00001": 5,
+        "amirmtan": 10
+      },
+      "sub_game_number": 5,
+      "winner_group": "amirmtan"
+    },
+    {
+      "result": "survival",
+      "roles": {
+        "GRP00001": "thief",
+        "amirmtan": "police"
+      },
+      "score": {
+        "GRP00001": 10,
+        "amirmtan": 5
+      },
+      "sub_game_number": 6,
+      "winner_group": "GRP00001"
+    }
+  ],
+  "match_mode": "counted",
+  "lecturer_report_sent": true,
+  "thief_commit": "395f7a88b8bed0763ef203b5c9c5faaeb0741476",
+  "cop_commit": "395f7a88b8bed0763ef203b5c9c5faaeb0741476",
+  "total_llm_tokens": 0
+}

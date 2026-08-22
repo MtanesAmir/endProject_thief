@@ -1,23 +1,74 @@
-"""Thief Evasion Brain strategy implementation with Q-learning integration."""
+"""Thief Evasion Brain strategy implementation using Minimax with Alpha-Beta Pruning."""
 import random
 from typing import Any, Dict, List, Optional, Tuple
-from src.domain.distance import manhattan_distance
+from src.domain.distance import bfs_distance
 from src.domain.grid import legal_moves
 from src.strategy.base_brain import BrainBase
-from src.strategy.q_learning import QLearningAgent
 
 class ThiefBrain(BrainBase):
     def __init__(self, start_pos: Tuple[int, int] = (3, 3), grid_size: int = 7):
         super().__init__(grid_size=grid_size)
         self.position = start_pos
         self.cop_position_estimate = (0, 0)
-        self.q_agent = QLearningAgent(alpha=0.1, gamma=0.95, epsilon=0.05)
-        self._prev_state_key: Optional[str] = None
-        self._prev_action: Optional[str] = None
+        self.max_depth = 4
 
-    def _state_key(self, pos: Tuple[int, int], cop_est: Tuple[int, int]) -> str:
-        """Serialize state for Q-table lookup."""
-        return f"{pos[0]},{pos[1]}|{cop_est[0]},{cop_est[1]}"
+    def evaluate_state(self, thief_pos: Tuple[int, int], cop_pos: Tuple[int, int], barriers: Optional[List[Tuple[int, int]]]) -> float:
+        if thief_pos == cop_pos:
+            return -10000.0  # Captured
+            
+        dist = bfs_distance(thief_pos, cop_pos, grid_size=self.grid_size, barriers=barriers)
+        
+        # Wall-proximity penalty: discourage hugging edges and corners
+        r, c = thief_pos
+        max_edge = self.grid_size - 1
+        wall_dist_r = min(r, max_edge - r)
+        wall_dist_c = min(c, max_edge - c)
+        min_wall_dist = min(wall_dist_r, wall_dist_c)
+
+        wall_penalty = 0.0
+        if min_wall_dist == 0:
+            wall_penalty = -8.0
+            if wall_dist_r == 0 and wall_dist_c == 0:
+                wall_penalty = -20.0
+        elif min_wall_dist == 1:
+            wall_penalty = -3.0
+
+        # Center-gravity bonus
+        center = self.grid_size / 2.0
+        center_bonus = -(abs(r - center) + abs(c - center)) * 0.5
+
+        return (dist * 10.0) + wall_penalty + center_bonus
+
+    def minimax(self, thief_pos: Tuple[int, int], cop_pos: Tuple[int, int], depth: int, alpha: float, beta: float, maximizingPlayer: bool, barriers: Optional[List[Tuple[int, int]]]) -> float:
+        if depth == 0 or thief_pos == cop_pos:
+            return self.evaluate_state(thief_pos, cop_pos, barriers)
+
+        if maximizingPlayer:
+            max_eval = -float('inf')
+            valid_moves = [p.to_tuple() for p in legal_moves(thief_pos, grid_size=self.grid_size, barriers=barriers)]
+            if not valid_moves:
+                return self.evaluate_state(thief_pos, cop_pos, barriers)
+                
+            for child_pos in valid_moves:
+                eval_score = self.minimax(child_pos, cop_pos, depth - 1, alpha, beta, False, barriers)
+                max_eval = max(max_eval, eval_score)
+                alpha = max(alpha, eval_score)
+                if beta <= alpha:
+                    break
+            return max_eval
+        else:
+            min_eval = float('inf')
+            valid_moves = [p.to_tuple() for p in legal_moves(cop_pos, grid_size=self.grid_size, barriers=barriers)]
+            if not valid_moves:
+                return self.evaluate_state(thief_pos, cop_pos, barriers)
+                
+            for child_pos in valid_moves:
+                eval_score = self.minimax(thief_pos, child_pos, depth - 1, alpha, beta, True, barriers)
+                min_eval = min(min_eval, eval_score)
+                beta = min(beta, eval_score)
+                if beta <= alpha:
+                    break
+            return min_eval
 
     def _pick_move(self, state: Dict[str, Any], belief_map: Any = None, valid_moves: Optional[List[Tuple[int, int]]] = None, barriers: Optional[List[Tuple[int, int]]] = None) -> Tuple[int, int]:
         if belief_map:
@@ -35,71 +86,17 @@ class ThiefBrain(BrainBase):
         if not valid_positions:
             return self.position
 
-        # Build state key for Q-learning
-        current_state_key = self._state_key(self.position, cop_pos)
-        action_keys = [str(m) for m in valid_positions]
-
-        # Get Q-learning recommendation
-        q_recommended = self.q_agent.choose_action(current_state_key, action_keys)
-
         best_move = valid_positions[0]
-        max_score = -99999
-        max_edge = self.grid_size - 1
+        max_score = -float('inf')
 
         for move in valid_positions:
-            dist = manhattan_distance(move, cop_pos)
-
-            future_valid = [p.to_tuple() for p in legal_moves(move, grid_size=self.grid_size, barriers=barriers)]
-            dof = len(future_valid)
-
-            # Dead-end penalty: penalize moves that leave us with <=2 options
-            penalty = 0
-            if dof <= 1:
-                penalty = -100
-            elif dof <= 2:
-                penalty = -30
-
-            # Wall-proximity penalty: discourage hugging edges and corners
-            r, c = move
-            wall_dist_r = min(r, max_edge - r)
-            wall_dist_c = min(c, max_edge - c)
-            min_wall_dist = min(wall_dist_r, wall_dist_c)
-
-            wall_penalty = 0
-            if min_wall_dist == 0:
-                # On the wall edge itself
-                wall_penalty = -8
-                # Extra penalty for corners (both dimensions on edge)
-                if wall_dist_r == 0 and wall_dist_c == 0:
-                    wall_penalty = -20
-            elif min_wall_dist == 1:
-                wall_penalty = -3
-
-            # Center-gravity bonus: slight pull toward interior positions
-            center = self.grid_size / 2.0
-            center_bonus = -(abs(r - center) + abs(c - center)) * 0.5
-
-            # Q-value bonus: reward moves that Q-learning has found effective
-            q_bonus = self.q_agent.q_table.get((current_state_key, str(move)), 0.0) * 2.0
-
-            score = (dist * 10) + penalty + wall_penalty + center_bonus + q_bonus
+            score = self.minimax(move, cop_pos, self.max_depth, -float('inf'), float('inf'), False, barriers)
+            if move == self.position:
+                score -= 0.1  # slight penalty for standing still
             if score > max_score:
                 max_score = score
                 best_move = move
-
-        # Update Q-learning from previous step
-        if self._prev_state_key is not None and self._prev_action is not None:
-            prev_dist = manhattan_distance(self.position, cop_pos)
-            new_dist = manhattan_distance(best_move, cop_pos)
-            reward = new_dist - prev_dist  # Positive when we increased distance
-            next_state_key = self._state_key(best_move, cop_pos)
-            next_actions = [str(m) for m in valid_positions]
-            self.q_agent.update(self._prev_state_key, self._prev_action, reward, next_state_key, next_actions)
-
-        # Store current state/action for next update
-        self._prev_state_key = current_state_key
-        self._prev_action = str(best_move)
-
+                
         self.position = best_move
         return best_move
 
